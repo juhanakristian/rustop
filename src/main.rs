@@ -1,5 +1,27 @@
-use ratatui::{DefaultTerminal, Frame, layout::{Rect, Constraint}, widgets::{Block, Borders, Row, Table}, style::{Color, Modifier, Style}};
-use sysinfo::{System};
+use ratatui::{
+    layout::{Constraint, Rect},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Row, Table, TableState},
+    DefaultTerminal, Frame,
+};
+use sysinfo::System;
+
+pub struct App {
+    sys: System,
+    table_state: TableState,
+}
+
+impl App {
+    fn new() -> Self {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+
+        Self {
+            sys,
+            table_state: TableState::default().with_selected(0),
+        }
+    }
+}
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -8,13 +30,11 @@ fn main() -> color_eyre::Result<()> {
 }
 
 fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
-    let mut sys = System::new_all();
-    sys.refresh_all();
-
+    let mut app = App::new();
     loop {
         terminal.draw(|frame| {
             let area = frame.area();
-            render(frame, area, &sys);
+            render(frame, area, &app.sys, &mut app.table_state);
         })?;
         if crossterm::event::read()?.is_key_press() {
             break Ok(());
@@ -22,19 +42,27 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     }
 }
 
-fn render(frame: &mut Frame, area: Rect, sys: &System) {
+fn render(frame: &mut Frame, area: Rect, sys: &System, table_state: &mut TableState) {
     let header = Row::new(vec!["PID", "Name", "CPU%", "Mem (KB)"])
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
         .bottom_margin(1);
 
-    let rows: Vec<Row> = sys.processes().values().map(|p| {
-        Row::new(vec![
-            p.pid().to_string(),
-            p.name().to_string_lossy().to_string(),
-            format!("{:.1}", p.cpu_usage()),
-            format!("{}", p.memory() / 1024),
-        ])
-    }).collect();
+    let rows: Vec<Row> = sys
+        .processes()
+        .values()
+        .map(|p| {
+            Row::new(vec![
+                p.pid().to_string(),
+                p.name().to_string_lossy().to_string(),
+                format!("{:.1}", p.cpu_usage()),
+                format!("{}", p.memory() / 1024),
+            ])
+        })
+        .collect();
 
     let widths = [
         Constraint::Length(8),
@@ -50,6 +78,6 @@ fn render(frame: &mut Frame, area: Rect, sys: &System) {
         .highlight_symbol(">> ");
 
     // let mut state = TableState::default();
-    // frame.render_stateful_widget(table, area, &mut state);
-    frame.render_widget(table, area);
+    frame.render_stateful_widget(table, area, table_state);
+    // frame.render_widget(table, area);
 }
