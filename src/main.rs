@@ -5,6 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Row, Table, TableState},
     DefaultTerminal, Frame,
 };
+use std::time::Duration;
 use sysinfo::{ProcessesToUpdate, System};
 
 pub struct App {
@@ -55,7 +56,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
             render(frame, area, &app.sys, &mut app.table_state);
         })?;
 
-        if let Some(key) = event::read()?.as_key_press_event() {
+        if event::poll(Duration::from_millis(100))? && let Some(key) = event::read()?.as_key_press_event() {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                 KeyCode::Char('j') | KeyCode::Down => app.select_next(),
