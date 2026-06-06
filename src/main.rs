@@ -5,12 +5,21 @@ use ratatui::{
     widgets::{Block, Borders, Row, Table, TableState},
     DefaultTerminal, Frame,
 };
+use std::cmp::Ordering::Equal;
 use std::time::Duration;
-use sysinfo::{ProcessesToUpdate, System};
+use sysinfo::{Process, ProcessesToUpdate, System};
+
+enum SortBy {
+    CPU,
+    Mem,
+    Pid,
+    Name,
+}
 
 pub struct App {
     sys: System,
     table_state: TableState,
+    sort: SortBy,
 }
 
 impl App {
@@ -24,6 +33,7 @@ impl App {
         Self {
             sys,
             table_state: TableState::default().with_selected(0),
+            sort: SortBy::CPU,
         }
     }
 
@@ -33,6 +43,15 @@ impl App {
 
     fn select_previous(&mut self) {
         self.table_state.select_previous();
+    }
+
+    fn next_sort_type(&mut self) {
+        match self.sort {
+            SortBy::CPU => self.sort = SortBy::Mem,
+            SortBy::Mem => self.sort = SortBy::Pid,
+            SortBy::Pid => self.sort = SortBy::Name,
+            SortBy::Name => self.sort = SortBy::CPU,
+        }
     }
 
     fn refresh(&mut self) {
@@ -53,14 +72,15 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     loop {
         terminal.draw(|frame| {
             let area = frame.area();
-            render(frame, area, &app.sys, &mut app.table_state);
+            render(frame, area, &app.sys, &mut app.table_state, &app.sort);
         })?;
 
-        if event::poll(Duration::from_millis(100))? && let Some(key) = event::read()?.as_key_press_event() {
+        if event::poll(Duration::from_millis(200))? && let Some(key) = event::read()?.as_key_press_event() {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                 KeyCode::Char('j') | KeyCode::Down => app.select_next(),
                 KeyCode::Char('k') | KeyCode::Up => app.select_previous(),
+                KeyCode::Char('s') | KeyCode::Up => app.next_sort_type(),
                 _ => {}
             }
         }
@@ -69,7 +89,13 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     }
 }
 
-fn render(frame: &mut Frame, area: Rect, sys: &System, table_state: &mut TableState) {
+fn render(
+    frame: &mut Frame,
+    area: Rect,
+    sys: &System,
+    table_state: &mut TableState,
+    sort_by: &SortBy,
+) {
     let header = Row::new(vec!["PID", "Name", "CPU%", "Mem (KB)"])
         .style(
             Style::default()
@@ -78,9 +104,18 @@ fn render(frame: &mut Frame, area: Rect, sys: &System, table_state: &mut TableSt
         )
         .bottom_margin(1);
 
-    let rows: Vec<Row> = sys
-        .processes()
-        .values()
+    let mut processes: Vec<&Process> = sys.processes().values().collect();
+    match sort_by {
+        SortBy::CPU => {
+            processes.sort_by(|a, b| b.cpu_usage().partial_cmp(&a.cpu_usage()).unwrap_or(Equal))
+        }
+        SortBy::Mem => processes.sort_by(|a, b| b.memory().cmp(&a.memory())),
+        SortBy::Pid => processes.sort_by(|a, b| a.pid().cmp(&b.pid())),
+        SortBy::Name => processes.sort_by(|a, b| a.name().cmp(b.name())),
+    }
+
+    let rows: Vec<Row> = processes
+        .into_iter()
         .map(|p| {
             Row::new(vec![
                 p.pid().to_string(),
@@ -104,7 +139,5 @@ fn render(frame: &mut Frame, area: Rect, sys: &System, table_state: &mut TableSt
         .row_highlight_style(Style::default().bg(Color::DarkGray))
         .highlight_symbol(">> ");
 
-    // let mut state = TableState::default();
     frame.render_stateful_widget(table, area, table_state);
-    // frame.render_widget(table, area);
 }
