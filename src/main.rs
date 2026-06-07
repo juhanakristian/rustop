@@ -2,7 +2,7 @@ use crossterm::event::{self, KeyCode};
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Row, Table, TableState},
     DefaultTerminal, Frame,
 };
 use std::cmp::Ordering::Equal;
@@ -79,8 +79,8 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                 KeyCode::Char('j') | KeyCode::Down => app.select_next(),
-                KeyCode::Char('k') | KeyCode::Up => app.select_previous(),
-                KeyCode::Char('s') | KeyCode::Up => app.next_sort_type(),
+                KeyCode::Char('k') | KeyCode::Down => app.select_previous(),
+                KeyCode::Char('s') | KeyCode::Down => app.next_sort_type(),
                 _ => {}
             }
         }
@@ -96,7 +96,19 @@ fn render(
     table_state: &mut TableState,
     sort_by: &SortBy,
 ) {
-    let header = Row::new(vec!["PID", "Name", "CPU%", "Mem (KB)"])
+    let header_cells = ["PID", "Name", "CPU%", "Mem (KB)"].map(|h| {
+        let label = match (sort_by, h) {
+            (SortBy::CPU, "CPU%") => format!("CPU% ▼"),
+            (SortBy::Mem, "Mem (KB)") => format!("Mem (KB) ▼"),
+            (SortBy::Pid, "PID") => format!("PID ▼"),
+            (SortBy::Name, "Name") => format!("Name ▼"),
+            _ => h.to_string(),
+        };
+
+        Cell::from(label).style(Style::default().bold())
+    });
+
+    let header = Row::new(header_cells)
         .style(
             Style::default()
                 .fg(Color::Yellow)
