@@ -10,7 +10,7 @@ use std::time::Duration;
 use sysinfo::{Process, ProcessesToUpdate, System};
 
 enum SortBy {
-    CPU,
+    Cpu,
     Mem,
     Pid,
     Name,
@@ -33,7 +33,7 @@ impl App {
         Self {
             sys,
             table_state: TableState::default().with_selected(0),
-            sort: SortBy::CPU,
+            sort: SortBy::Cpu,
         }
     }
 
@@ -47,10 +47,10 @@ impl App {
 
     fn next_sort_type(&mut self) {
         match self.sort {
-            SortBy::CPU => self.sort = SortBy::Mem,
+            SortBy::Cpu => self.sort = SortBy::Mem,
             SortBy::Mem => self.sort = SortBy::Pid,
             SortBy::Pid => self.sort = SortBy::Name,
-            SortBy::Name => self.sort = SortBy::CPU,
+            SortBy::Name => self.sort = SortBy::Cpu,
         }
     }
 
@@ -98,7 +98,7 @@ fn render(
 ) {
     let header_cells = ["PID", "Name", "CPU%", "Mem (KB)"].map(|h| {
         let label = match (sort_by, h) {
-            (SortBy::CPU, "CPU%") => format!("CPU% ▼"),
+            (SortBy::Cpu, "CPU%") => format!("CPU% ▼"),
             (SortBy::Mem, "Mem (KB)") => format!("Mem (KB) ▼"),
             (SortBy::Pid, "PID") => format!("PID ▼"),
             (SortBy::Name, "Name") => format!("Name ▼"),
@@ -118,7 +118,7 @@ fn render(
 
     let mut processes: Vec<&Process> = sys.processes().values().collect();
     match sort_by {
-        SortBy::CPU => {
+        SortBy::Cpu => {
             processes.sort_by(|a, b| b.cpu_usage().partial_cmp(&a.cpu_usage()).unwrap_or(Equal))
         }
         SortBy::Mem => processes.sort_by(|a, b| b.memory().cmp(&a.memory())),
