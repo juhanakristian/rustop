@@ -1,8 +1,9 @@
+use core::fmt;
 use crossterm::event::{self, KeyCode};
 use ratatui::{
-    layout::{Constraint, Rect},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     DefaultTerminal, Frame,
 };
 use std::cmp::Ordering::Equal;
@@ -14,6 +15,17 @@ enum SortBy {
     Mem,
     Pid,
     Name,
+}
+
+impl fmt::Display for SortBy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SortBy::Cpu => write!(f, "CPU"),
+            SortBy::Mem => write!(f, "Memory"),
+            SortBy::Pid => write!(f, "PID"),
+            SortBy::Name => write!(f, "Name"),
+        }
+    }
 }
 
 pub struct App {
@@ -96,6 +108,10 @@ fn render(
     table_state: &mut TableState,
     sort_by: &SortBy,
 ) {
+    use Constraint::{Fill, Length, Min};
+    let vertical = Layout::vertical([Length(1), Min(0), Length(3)]);
+    let [title_area, main_area, status_area] = vertical.areas(area);
+
     let header_cells = ["PID", "Name", "CPU%", "Mem (KB)"].map(|h| {
         let label = match (sort_by, h) {
             (SortBy::Cpu, "CPU%") => format!("CPU% ▼"),
@@ -151,5 +167,12 @@ fn render(
         .row_highlight_style(Style::default().bg(Color::DarkGray))
         .highlight_symbol(">> ");
 
-    frame.render_stateful_widget(table, area, table_state);
+    frame.render_widget(Block::default().title("rustop"), title_area);
+    frame.render_stateful_widget(table, main_area, table_state);
+
+    let text = format!(" Sort: {} ", sort_by,);
+
+    let footer = Paragraph::new(text).style(Style::default());
+
+    frame.render_widget(footer, status_area);
 }
