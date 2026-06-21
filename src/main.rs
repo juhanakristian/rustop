@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{cmp::Ordering, fmt, ptr::null};
 use crossterm::event::{self, KeyCode};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
@@ -9,6 +9,13 @@ use ratatui::{
 use std::cmp::Ordering::Equal;
 use std::time::Duration;
 use sysinfo::{Process, ProcessesToUpdate, System};
+
+pub struct RustopProcess {
+    cpu: f32,
+    mem: u64,
+    pid: Option<String>,
+    name: String,
+}
 
 enum SortBy {
     Cpu,
@@ -32,6 +39,7 @@ pub struct App {
     sys: System,
     table_state: TableState,
     sort: SortBy,
+    grouping: bool,
 }
 
 impl App {
@@ -46,6 +54,7 @@ impl App {
             sys,
             table_state: TableState::default().with_selected(0),
             sort: SortBy::Cpu,
+            grouping: false,
         }
     }
 
@@ -87,12 +96,13 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
             render(frame, area, &app.sys, &mut app.table_state, &app.sort);
         })?;
 
-        if event::poll(Duration::from_millis(200))? && let Some(key) = event::read()?.as_key_press_event() {
+        if event::poll(Duration::from_millis(500))? && let Some(key) = event::read()?.as_key_press_event() {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                 KeyCode::Char('j') | KeyCode::Down => app.select_next(),
                 KeyCode::Char('k') | KeyCode::Down => app.select_previous(),
                 KeyCode::Char('s') | KeyCode::Down => app.next_sort_type(),
+                KeyCode::Char('g') | KeyCode::Down => app.grouping = !app.grouping,
                 _ => {}
             }
         }
@@ -132,24 +142,25 @@ fn render(
         )
         .bottom_margin(1);
 
-    let mut processes: Vec<&Process> = sys.processes().values().collect();
+    let processes: Vec<&Process> = sys.processes().values().collect();
+
+    let mut rustop_processes = grouped_processes(convert_to_rustopprocess(processes));
+
     match sort_by {
-        SortBy::Cpu => {
-            processes.sort_by(|a, b| b.cpu_usage().partial_cmp(&a.cpu_usage()).unwrap_or(Equal))
-        }
-        SortBy::Mem => processes.sort_by(|a, b| b.memory().cmp(&a.memory())),
-        SortBy::Pid => processes.sort_by(|a, b| a.pid().cmp(&b.pid())),
-        SortBy::Name => processes.sort_by(|a, b| a.name().cmp(b.name())),
+        SortBy::Cpu => rustop_processes.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(Equal)),
+        SortBy::Mem => rustop_processes.sort_by(|a, b| b.mem.cmp(&a.mem)),
+        SortBy::Pid => rustop_processes.sort_by(|a, b| a.pid.cmp(&b.pid)),
+        SortBy::Name => rustop_processes.sort_by(|a, b| a.name.cmp(&b.name)),
     }
 
-    let rows: Vec<Row> = processes
+    let rows: Vec<Row> = rustop_processes
         .into_iter()
         .map(|p| {
             Row::new(vec![
-                p.pid().to_string(),
-                p.name().to_string_lossy().to_string(),
-                format!("{:.1}", p.cpu_usage()),
-                format!("{}", p.memory() / 1024),
+                p.pid.map_or_else(|| "-".to_string(), |pid| pid.to_string()),
+                p.name.clone(),
+                format!("{:.1}", p.cpu),
+                format!("{}", p.mem / 1024),
             ])
         })
         .collect();
@@ -175,4 +186,38 @@ fn render(
     let footer = Paragraph::new(text).style(Style::default());
 
     frame.render_widget(footer, status_area);
+}
+
+fn convert_to_rustopprocess(processes: Vec<&Process>) -> Vec<RustopProcess> {
+    let mut result: Vec<RustopProcess> = vec![];
+    for process in processes {
+        result.push(RustopProcess {
+            name: process.name().to_str().unwrap_or("").to_string(),
+            cpu: process.cpu_usage(),
+            mem: process.memory(),
+            pid: Some(process.pid().to_string()),
+        })
+    }
+
+    return result;
+}
+
+fn grouped_processes(processes: Vec<RustopProcess>) -> Vec<RustopProcess> {
+    let mut result: Vec<RustopProcess> = vec![];
+
+    for process in processes {
+        if let Some(idx) = result.iter().position(|p| p.name == process.name) {
+            result[idx].cpu += process.cpu;
+            result[idx].mem += process.mem;
+        } else {
+            result.push(RustopProcess {
+                name: process.name,
+                cpu: process.cpu,
+                mem: process.mem,
+                pid: None,
+            })
+        }
+    }
+
+    return result;
 }
