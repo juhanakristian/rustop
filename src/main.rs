@@ -93,7 +93,14 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     loop {
         terminal.draw(|frame| {
             let area = frame.area();
-            render(frame, area, &app.sys, &mut app.table_state, &app.sort);
+            render(
+                frame,
+                area,
+                &app.sys,
+                &mut app.table_state,
+                &app.sort,
+                app.grouping,
+            );
         })?;
 
         if event::poll(Duration::from_millis(500))? && let Some(key) = event::read()?.as_key_press_event() {
@@ -117,6 +124,7 @@ fn render(
     sys: &System,
     table_state: &mut TableState,
     sort_by: &SortBy,
+    grouping: bool,
 ) {
     use Constraint::{Fill, Length, Min};
     let vertical = Layout::vertical([Length(1), Min(0), Length(3)]);
@@ -144,7 +152,10 @@ fn render(
 
     let processes: Vec<&Process> = sys.processes().values().collect();
 
-    let mut rustop_processes = grouped_processes(convert_to_rustopprocess(processes));
+    let mut rustop_processes = convert_to_rustopprocess(processes);
+    if grouping {
+        rustop_processes = grouped_processes(rustop_processes)
+    }
 
     match sort_by {
         SortBy::Cpu => rustop_processes.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(Equal)),
