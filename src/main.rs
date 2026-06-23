@@ -24,6 +24,21 @@ enum SortBy {
     Name,
 }
 
+#[derive(PartialEq)]
+enum Mode {
+    Normal,
+    Filter,
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Mode::Normal => write!(f, "Normal"),
+            Mode::Filter => write!(f, "Filter"),
+        }
+    }
+}
+
 impl fmt::Display for SortBy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -40,6 +55,8 @@ pub struct App {
     table_state: TableState,
     sort: SortBy,
     grouping: bool,
+    filter: String,
+    mode: Mode,
 }
 
 impl App {
@@ -55,6 +72,8 @@ impl App {
             table_state: TableState::default().with_selected(0),
             sort: SortBy::Cpu,
             grouping: false,
+            filter: "".to_string(),
+            mode: Mode::Normal,
         }
     }
 
@@ -100,17 +119,27 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 &mut app.table_state,
                 &app.sort,
                 app.grouping,
+                &app.mode,
             );
         })?;
 
         if event::poll(Duration::from_millis(500))? && let Some(key) = event::read()?.as_key_press_event() {
-            match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                KeyCode::Char('j') | KeyCode::Down => app.select_next(),
-                KeyCode::Char('k') | KeyCode::Down => app.select_previous(),
-                KeyCode::Char('s') | KeyCode::Down => app.next_sort_type(),
-                KeyCode::Char('g') | KeyCode::Down => app.grouping = !app.grouping,
-                _ => {}
+
+            if app.mode == Mode::Normal {
+                match key.code {
+                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('j') | KeyCode::Down => app.select_next(),
+                    KeyCode::Char('k') | KeyCode::Up => app.select_previous(),
+                    KeyCode::Char('s') => app.next_sort_type(),
+                    KeyCode::Char('g') => app.grouping = !app.grouping,
+                    KeyCode::Char('/') => app.mode = Mode::Filter,
+                    KeyCode::Esc => app.mode = Mode::Normal,
+                    _ => {}
+                }
+            } else {
+                if key.code == KeyCode::Esc {
+                    app.mode = Mode::Normal;
+                }
             }
         }
 
@@ -125,6 +154,7 @@ fn render(
     table_state: &mut TableState,
     sort_by: &SortBy,
     grouping: bool,
+    mode: &Mode,
 ) {
     use Constraint::{Fill, Length, Min};
     let vertical = Layout::vertical([Length(1), Min(0), Length(3)]);
@@ -192,7 +222,7 @@ fn render(
     frame.render_widget(Block::default().title("rustop"), title_area);
     frame.render_stateful_widget(table, main_area, table_state);
 
-    let text = format!(" Sort: {} ", sort_by,);
+    let text = format!(" Sort: {} Grouping: {} Mode: {}", sort_by, grouping, mode);
 
     let footer = Paragraph::new(text).style(Style::default());
 
