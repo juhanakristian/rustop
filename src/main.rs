@@ -120,6 +120,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 &app.sort,
                 app.grouping,
                 &app.mode,
+                &app.filter,
             );
         })?;
 
@@ -137,9 +138,13 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                     _ => {}
                 }
             } else {
-                if key.code == KeyCode::Esc {
-                    app.mode = Mode::Normal;
+                match key.code {
+                    KeyCode::Char(c) => app.filter.push(c),
+                    KeyCode::Backspace => {app.filter.pop();},
+                    KeyCode::Esc => app.mode = Mode::Normal,
+                    _ => {}
                 }
+
             }
         }
 
@@ -155,6 +160,7 @@ fn render(
     sort_by: &SortBy,
     grouping: bool,
     mode: &Mode,
+    filter: &String,
 ) {
     use Constraint::{Fill, Length, Min};
     let vertical = Layout::vertical([Length(1), Min(0), Length(3)]);
@@ -222,7 +228,10 @@ fn render(
     frame.render_widget(Block::default().title("rustop"), title_area);
     frame.render_stateful_widget(table, main_area, table_state);
 
-    let text = format!(" Sort: {} Grouping: {} Mode: {}", sort_by, grouping, mode);
+    let text = format!(
+        " Sort: {} Grouping: {} Mode: {} Filter: {}",
+        sort_by, grouping, mode, filter
+    );
 
     let footer = Paragraph::new(text).style(Style::default());
 
