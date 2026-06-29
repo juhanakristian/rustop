@@ -162,16 +162,16 @@ fn render(
     mode: &Mode,
     filter: &String,
 ) {
-    use Constraint::{Fill, Length, Min};
+    use Constraint::{Length, Min};
     let vertical = Layout::vertical([Length(1), Min(0), Length(3)]);
     let [title_area, main_area, status_area] = vertical.areas(area);
 
     let header_cells = ["PID", "Name", "CPU%", "Mem (KB)"].map(|h| {
         let label = match (sort_by, h) {
-            (SortBy::Cpu, "CPU%") => format!("CPU% ▼"),
-            (SortBy::Mem, "Mem (KB)") => format!("Mem (KB) ▼"),
-            (SortBy::Pid, "PID") => format!("PID ▼"),
-            (SortBy::Name, "Name") => format!("Name ▼"),
+            (SortBy::Cpu, "CPU%") => "CPU% ▼".to_string(),
+            (SortBy::Mem, "Mem (KB)") => "Mem (KB) ▼".to_string(),
+            (SortBy::Pid, "PID") => "PID ▼".to_string(),
+            (SortBy::Name, "Name") => "Name ▼".to_string(),
             _ => h.to_string(),
         };
 
@@ -190,12 +190,17 @@ fn render(
 
     let mut rustop_processes = convert_to_rustopprocess(processes);
     if grouping {
-        rustop_processes = grouped_processes(rustop_processes)
+        rustop_processes = grouped_processes(rustop_processes);
+    }
+
+    if filter.chars().count() > 0 {
+        rustop_processes = filter_processes(rustop_processes, filter);
     }
 
     match sort_by {
         SortBy::Cpu => rustop_processes.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(Equal)),
-        SortBy::Mem => rustop_processes.sort_by(|a, b| b.mem.cmp(&a.mem)),
+        // SortBy::Mem => rustop_processes.sort_by(|a, b| b.mem.cmp(&a.mem)),
+        SortBy::Mem => rustop_processes.sort_by_key(|b| std::cmp::Reverse(b.mem)),
         SortBy::Pid => rustop_processes.sort_by(|a, b| a.pid.cmp(&b.pid)),
         SortBy::Name => rustop_processes.sort_by(|a, b| a.name.cmp(&b.name)),
     }
@@ -265,6 +270,23 @@ fn grouped_processes(processes: Vec<RustopProcess>) -> Vec<RustopProcess> {
                 cpu: process.cpu,
                 mem: process.mem,
                 pid: None,
+            })
+        }
+    }
+
+    return result;
+}
+
+fn filter_processes(processes: Vec<RustopProcess>, filter: &String) -> Vec<RustopProcess> {
+    let mut result: Vec<RustopProcess> = vec![];
+
+    for process in processes {
+        if process.name.contains(filter) {
+            result.push(RustopProcess {
+                name: process.name,
+                cpu: process.cpu,
+                mem: process.mem,
+                pid: process.pid,
             })
         }
     }
