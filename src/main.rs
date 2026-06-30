@@ -281,7 +281,7 @@ fn filter_processes(processes: Vec<RustopProcess>, filter: &String) -> Vec<Rusto
     let mut result: Vec<RustopProcess> = vec![];
 
     for process in processes {
-        if process.name.contains(filter) {
+        if process.name.to_lowercase().contains(&filter.to_lowercase()) {
             result.push(RustopProcess {
                 name: process.name,
                 cpu: process.cpu,
